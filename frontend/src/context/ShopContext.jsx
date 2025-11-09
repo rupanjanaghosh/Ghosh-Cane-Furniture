@@ -8,10 +8,13 @@ export const ShopContext = createContext();
 const ShopContextProvider = ({ children }) => {
   const currency = "₹";
   const delivery_fee = 10;
-  const backendUrl = import.meta.env.VITE_BACKEND_URL;
+
+  // ✅ Added fallback for backend URL in case env is missing on Vercel
+  const backendUrl =
+    import.meta.env.VITE_BACKEND_URL || "https://ghosh-cane-furniture.onrender.com";
 
   const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true); 
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [cartItems, setCartItems] = useState({});
@@ -23,11 +26,17 @@ const ShopContextProvider = ({ children }) => {
   const getProductsData = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`${backendUrl}/api/product/list`);
-      if (response.data.success) {
+      const response = await axios.get(`${backendUrl}/api/product/list`, {
+        headers: { "Cache-Control": "no-cache" }, // ✅ avoid caching on first load
+      });
+
+      // ✅ Defensive check in case response structure differs
+      if (response.data.success && Array.isArray(response.data.products)) {
         setProducts(response.data.products);
+      } else if (Array.isArray(response.data.data)) {
+        setProducts(response.data.data);
       } else {
-        toast.error(response.data.message);
+        toast.error(response.data.message || "Failed to fetch products");
       }
     } catch (error) {
       toast.error(error.message);
@@ -53,9 +62,12 @@ const ShopContextProvider = ({ children }) => {
     }
   };
 
+  // ✅ Ensure backend URL and data are fetched after deploy hydration
   useEffect(() => {
-    getProductsData();
-  }, []);
+    if (backendUrl) {
+      getProductsData();
+    }
+  }, [backendUrl]);
 
   useEffect(() => {
     const storedToken = localStorage.getItem("token");
@@ -63,7 +75,7 @@ const ShopContextProvider = ({ children }) => {
       setToken(storedToken);
       getUserCart(storedToken);
     }
-  }, []);
+  }, [token]);
 
   // Add product to cart
   const addToCart = async (itemId, size) => {
